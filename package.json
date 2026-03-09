@@ -2,7 +2,7 @@
   "name": "drg-finding",
   "version": "1.0.0-beta",
   "subVersion": "2026-03-09-1",
-  "description": "",
+  "description": "ระบบค้นหากลุ่มวินิจฉัยโรคร่วม (DRG Finding) รองรับ DRG v.6.3.5",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,7 +11,7 @@
     "start": "node dist/server.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "เวชสถิติทำงานนาน",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

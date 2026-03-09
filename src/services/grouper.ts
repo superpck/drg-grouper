@@ -15,7 +15,8 @@ type PremdcProcGroups = {
   laryngectomy: string[];
 };
 let premdcProcGroupsCache: PremdcProcGroups | null = null;
-let validProcCache: Set<string> | null = null;
+let validProcBaseCache: Set<string> | null = null;
+let validProcExtendedCache: Set<string> | null = null;
 
 function norm(code: string): string {
   return code.replace(/\./g, '').trim().toUpperCase();
@@ -104,29 +105,32 @@ async function getPremdcProcGroups(): Promise<PremdcProcGroups> {
   return premdcProcGroupsCache;
 }
 
-async function getValidProcSet(): Promise<Set<string>> {
-  if (validProcCache) return validProcCache;
+async function getValidProcSets(): Promise<{ base: Set<string>; extended: Set<string> }> {
+  if (validProcBaseCache && validProcExtendedCache) {
+    return { base: validProcBaseCache, extended: validProcExtendedCache };
+  }
   const hasTable = await db.schema.hasTable('lib_proc');
   if (!hasTable) {
     throw new Error('Missing lib_proc table for procedure validation');
   }
   const rows = await db('lib_proc').select('code');
   const procDcRows = await db.schema.hasTable('lib_proc_dc') ? await db('lib_proc_dc').select('proc') : [];
-  const codeSet = new Set<string>();
+  const baseSet = new Set<string>();
+  const extSet = new Set<string>();
   for (const row of rows) {
     const code = normProc(String(row.code || ''));
     if (!code) continue;
-    codeSet.add(code);
-    codeSet.add(procBase(code));
+    baseSet.add(procBase(code));
   }
   for (const row of procDcRows) {
     const code = normProc(String(row.proc || ''));
     if (!code) continue;
-    codeSet.add(code);
-    codeSet.add(procBase(code));
+    if (code.includes('+')) extSet.add(code);
+    else baseSet.add(procBase(code));
   }
-  validProcCache = codeSet;
-  return validProcCache;
+  validProcBaseCache = baseSet;
+  validProcExtendedCache = extSet;
+  return { base: validProcBaseCache, extended: validProcExtendedCache };
 }
 
 function overlapCount(target: Set<string>, values: string[]): number {
@@ -334,7 +338,7 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
 
   const normalizedSdx = (input.sdx || []).map(norm).filter(Boolean);
   const normalizedProc = (input.proc || []).map(normProc).filter(Boolean);
-  const validProcSet = await getValidProcSet();
+  const validProcSets = await getValidProcSets();
   const sdxUniverse = [...new Set(normalizedSdx)];
   const sdxValidRows = sdxUniverse.length
     ? await db('valid_dx').select('code').whereIn('code', sdxUniverse)
@@ -374,8 +378,9 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
     acceptedSdx.push(code);
   }
   for (const code of normalizedProc) {
-    const variants = procVariants(code);
-    const invalid = !variants.some((v) => validProcSet.has(v)) || seenProc.has(code);
+    const hasExtension = code.includes('+');
+    const valid = hasExtension ? validProcSets.extended.has(code) : validProcSets.base.has(procBase(code));
+    const invalid = !valid || seenProc.has(code);
     if (invalid) {
       hasProcWarning = true;
       continue;

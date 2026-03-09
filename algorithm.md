@@ -1,4 +1,6 @@
-# Thai DRG v6.3.x Algorithm (จากเอกสาร 7 เล่ม)
+# Thai DRG v6.3.x Grouper Algorithm (Public Overview)
+
+เอกสารนี้เป็นสรุปแนวทาง implementation ของโปรเจกต์ เพื่อใช้อธิบาย logic ให้ผู้อ่านบน public GitHub
 
 เอกสารอ้างอิงที่ใช้:
 - เล่ม 1 (หลักเกณฑ์, validation, Appendix A-H)
@@ -39,11 +41,13 @@
 
 3. ตรวจ SDx/Proc
     - SDx ถูก normalize เป็น uppercase
-    - SDx ที่ไม่พบใน `valid_dx`, ซ้ำกับ PDx, หรือซ้ำกันเอง จะถูกตัดทิ้ง
+    - SDx ที่ไม่พบใน `valid_dx`, ซ้ำกับ PDx, ซ้ำกันเอง, หรือขัดแย้งเพศ/อายุ จะถูกตัดทิ้ง
     - หากมีกรณีข้างต้นอย่างน้อย 1 รายการ ให้คืน `WARNING_1`  
       (`code=1`, `name=WARNING_1`, `description=SDx ใช้ไม่ได้ หรือซ้ำกับ PDx หรือ ซ้ำกันเอง`)
-    - Proc ที่ไม่พบใน `lib_proc`/`lib_proc_dc` หรือซ้ำกันเอง จะถูกตัดทิ้ง
-    - รองรับรหัส Proc แบบมี extension (`proc+ext` เช่น `9604+11`) โดยตรวจทั้งรหัสเต็มและ base proc
+    - Proc ที่ไม่พบในชุดรหัสที่ยอมรับได้ หรือซ้ำกันเอง จะถูกตัดทิ้ง
+    - รองรับรหัส Proc แบบมี extension (`proc+ext` เช่น `9604+11`)
+      - base proc ตรวจจาก `lib_proc`
+      - extended proc ตรวจจาก `lib_proc_dc.proc`
     - หากมี Proc invalid/duplicate อย่างน้อย 1 รายการ ให้คืน `WARNING_8`  
       (`code=8`, `name=WARNING_8`, `description=Proc ใช้ไม่ได้ หรือ ซ้ำกันเอง`)
     - warning เป็นผลรวมรหัส (ไม่นับซ้ำรหัสเดิม)
@@ -53,15 +57,15 @@
 
 > ถ้ามีหลาย error พร้อมกัน ให้ใช้ error code ต่ำสุดที่เจอในกลุ่ม error ที่ต้องหยุด
 
-**ตารางที่ใช้ในขั้นตอนนี้**
-- `valid_dx` (รายการ diagnosis code + mdc จาก Appendix E)
-- `lib_proc` (รายการ procedure code มาตรฐานสำหรับตรวจ valid proc)
-- `lib_proc_dc` (map mdc/proc->dc รวมรหัส proc แบบมี extension)
+**ชุดข้อมูลที่ใช้ในขั้นตอนนี้**
+- `valid_dx` (รายการ diagnosis code ที่ยอมรับได้)
+- `lib_proc` (รายการ base procedure code ที่ยอมรับได้)
+- `lib_proc_dc` (mapping proc->dc ที่รวมรหัสแบบ extension)
 - `appendix_a2_unacceptable_pdx` (Unacceptable PDx)
 - `appendix_a3_age_conflict` (age conflict)
 - `appendix_a4_sex_conflict` (sex conflict; ใช้รหัสเพศ 1/2)
 - `appendix_a1_dagger_asterisk_substitution` (สลับ dagger/asterisk)
-- `drg_error_codes`, `drg_warning_codes` (สรุปผล validation)
+- `drg_error_codes`, `drg_warning_codes` (ข้อความ error/warning มาตรฐาน)
 
 **หมายเหตุ `valid_dx` (implementation ปัจจุบัน)**
 - สร้างจาก Appendix E เล่ม 1 โดย parse จาก `appendix_e_lines` (รองรับหน้าที่มี 6 sector แล้วในชั้น extract)
@@ -88,10 +92,10 @@
 5. **MDC01-23**
    - ใช้ PDx assignment ของแต่ละ MDC
 6. **Fallback ปัจจุบันใน implementation**
-   - ถ้าไม่เข้า PreMDC rule จะใช้ `cmi.drg69` (อิง PDx และให้คะแนนจาก HCODE/SDx/Proc/sex/age/LOS) เพื่อหา DRG ที่ใกล้เคียงที่สุด
-   - `services/grouper.ts` ไม่ใช้ `drg69_compare.expected_*` ในการคำนวณผลบริการ (ใช้เฉพาะ algorithm path)
+   - ถ้าไม่เข้า PreMDC rule จะใช้ reference-assisted matching เพื่อหา DRG ที่ใกล้เคียงที่สุด
+   - สำหรับ production ที่ต้องการ deterministic behavior ควรผูกกฎ MDC/DC เต็มรูปแบบจากชุดข้อมูลมาตรฐาน
 
-**ตารางที่ใช้ในขั้นตอนนี้**
+**ชุดข้อมูลที่ใช้ในขั้นตอนนี้**
 - `mdc_definitions` (ลำดับและหมวด MDC)
 - `pdc_definitions` (คีย์ PDC ที่ผูกกับ MDC)
 - `mdc_icd10_to_pdc` (map PDx -> PDC ใน MDC)
@@ -227,13 +231,13 @@
 - `error_code`, `warning_code_sum`, `warnings[]`
 
 สำหรับงานตรวจสอบ:
-- เทียบกับ `cmi.drg69` (เฉพาะ `hcode='10670'`)
-- บันทึกลง `drg69_compare` พร้อม `correct` (0/1)
+- เทียบกับชุดข้อมูลอ้างอิงที่องค์กรใช้งาน
+- เก็บผลเปรียบเทียบแยกจาก flow บริการหลัก เพื่อป้องกัน data leakage
 
-**ตารางที่ใช้ในขั้นตอนนี้**
+**ชุดข้อมูลที่ใช้ในขั้นตอนนี้**
 - `grouper_cases` (input ที่รับเข้า)
 - `grouper_results` (ผลคำนวณ DRG/AdjRW)
-- `drg69_compare` (ผลเทียบ expected vs actual)
+- `drg69_compare` (ตัวอย่างตารางผลเทียบ expected vs actual)
 
 ---
 
