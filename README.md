@@ -55,3 +55,7 @@ npm start
 - DB connection config is read from environment variables in `src/config.ts`
 - UI is served from `public/`
 - ดูประวัติการเปลี่ยนแปลงที่ `CHANGELOG.md`
+
+## Credit
+- สำนักพัฒนากลุ่มโรคร่วมไทย (สรท.) Thai CaseMix Centre (TCMC) https://www.tcmc.or.th/
+- เอกสารเพื่อให้ AI learning ได้จาก https://www.tcmc.or.th/download-tcmc (7 เล่ม)
