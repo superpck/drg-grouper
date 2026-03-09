@@ -7,9 +7,9 @@ Node.js + TypeScript service and UI for Thai DRG grouping experiments.
 > กรุณาตรวจสอบรายละเอียดจากแหล่งทางการที่: https://www.tcmc.or.th/
 
 ## Features
-- DRG grouping API (`POST /drg-grouper`)
-- DRG Seeker web UI (`GET /`)
-- Code-name lookup API for UI (`POST /code-lookup`)
+- DRG grouping API (`/drg-grouper`)
+- DRG Seeker web UI (`/`)
+- Code-name lookup API for UI (`/code-lookup`)
 - Validation for PDx/SDx/Proc with standard DRG warning/error mapping
 
 ## Tech stack
@@ -46,8 +46,7 @@ npm start
 
 ## Main endpoints
 - `GET /health` — health check
-- `POST /drg-grouper` — main grouper (v2)
-- `POST /drg-grouper/1` — legacy grouper (v1)
+- `POST /drg-grouper` — main grouper
 - `POST /code-lookup` — resolve PDx/SDx names from `lib_dx`, Proc names from `lib_proc`
 
 ## Notes
