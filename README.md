@@ -1,4 +1,4 @@
-# ระบบค้นหากลุ่มวินิจฉัยโรคร่วม (DRG Finding)
+# ระบบค้นหากลุ่มวินิจฉัยโรคร่วม (DRG Finding) รองรับ DRG TGRP v.6.3.5
 
 Node.js + TypeScript service and UI for Thai DRG grouping experiments.
 
@@ -7,9 +7,9 @@ Node.js + TypeScript service and UI for Thai DRG grouping experiments.
 > กรุณาตรวจสอบรายละเอียดจากแหล่งทางการที่: https://www.tcmc.or.th/
 
 ## Features
-- DRG grouping API (`/drg-grouper`)
-- DRG Seeker web UI (`/`)
-- Code-name lookup API for UI (`/code-lookup`)
+- DRG grouping API (`POST /drg-grouper`)
+- DRG Seeker web UI (`GET /`)
+- Code-name lookup API for UI (`POST /code-lookup`)
 - Validation for PDx/SDx/Proc with standard DRG warning/error mapping
 
 ## Tech stack
@@ -18,8 +18,8 @@ Node.js + TypeScript service and UI for Thai DRG grouping experiments.
 - Vanilla HTML/CSS/JS for UI
 
 ## Prerequisites
-- Node.js 20+
-- MySQL with DRG data loaded (default in this project uses `drg_finding` at `127.0.0.1:3336`)
+- Node.js 22+
+- MySQL with DRG data loaded (default in this project uses `drg_finding` at `127.0.0.1:3306`)
 
 ## Install
 ```bash
