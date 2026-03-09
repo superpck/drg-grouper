@@ -2,6 +2,10 @@
 
 Node.js + TypeScript service and UI for Thai DRG grouping experiments.
 
+> ⚠️ **คำเตือน**  
+> ระบบนี้เป็นเพียงการค้นหาเบื้องต้น ซึ่งอาจจะไม่ถูกต้องตามการค้นหาของ สำนักพัฒนากลุ่มโรคร่วมไทย (สรท.) Thai CaseMix Centre (TCMC)  
+> กรุณาตรวจสอบรายละเอียดจากแหล่งทางการที่: https://www.tcmc.or.th/
+
 ## Features
 - DRG grouping API (`/drg-grouper`)
 - DRG Seeker web UI (`/`)
@@ -33,6 +37,13 @@ npm run build
 npm start
 ```
 
+## การใช้งาน UI (DRG Seeker)
+1. เปิดเซิร์ฟเวอร์ด้วย `npm run dev` หรือ `npm start`
+2. เปิดเบราว์เซอร์ที่ `http://localhost:3000/`
+3. กรอกข้อมูลหลักของเคส เช่น `HCODE`, `AN`, `PDx`, `SDx`, `Proc`, อายุ/เพศ และวันเวลา admit/discharge
+4. เมื่อแก้ไข `PDx/SDx/Proc` ระบบจะแสดงชื่อ code อัตโนมัติจากฐานข้อมูล
+5. กด **Analyze DRG** เพื่อดูผลลัพธ์สรุป, ขั้นตอนการวิเคราะห์ (trace), และ raw request/response
+
 ## Main endpoints
 - `GET /health` — health check
 - `POST /drg-grouper` — main grouper (v2)
@@ -43,4 +54,4 @@ npm start
 - Default app port: `3000`
 - DB connection config is read from environment variables in `src/config.ts`
 - UI is served from `public/`
-
+- ดูประวัติการเปลี่ยนแปลงที่ `CHANGELOG.md`
