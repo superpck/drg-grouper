@@ -39,7 +39,7 @@ export type GrouperOutput = {
   dc: string;
   rw: number;
   adjrw: number;
-  cmi: number;
+  cmi?: number;
   wtlos: number;
   ot: number;
   rw0day: number;
@@ -47,4 +47,5 @@ export type GrouperOutput = {
   warningCodeSum: number;
   warnings: WarningCode[];
   trace: TraceStep[];
+  usage_second?: number;
 };

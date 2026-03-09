@@ -305,6 +305,7 @@ async function calcAdjRw(drg: string, rw: number, wtlos: number, ot: number, rw0
 type GroupCaseOptions = { persist?: boolean };
 
 export async function groupCase(input: GrouperInput, options?: GroupCaseOptions): Promise<GrouperOutput> {
+  const timeStart = performance.now();
   const shouldPersist = options?.persist ?? true;
   if (!input.pdx?.trim()) {
     throw new DrgStandardError(
@@ -469,7 +470,7 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
   const ofFactor = Number(w.of_factor);
 
   const computedAdjRw = await calcAdjRw(drg, rw, wtlos, ot, rw0day, ofFactor, los, stayMinutes);
-  const adjrw = Number(computedAdjRw.toFixed(4));
+  const adjrw = roundTo4(computedAdjRw);
   trace.push({
     step: 'RW/AdjRW calculation',
     status: 'ok',
@@ -510,6 +511,10 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
     }).onConflict(['hcode', 'an']).merge();
   }
 
+  const timeEnd = performance.now();
+  const timeDiff = timeEnd - timeStart;
+  const usage_second = Number((Math.floor(timeDiff / 1000) + ((timeDiff % 1000) / 1000)).toFixed(2));
+
   return {
     hcode: normalizedInput.hcode,
     an: normalizedInput.an,
@@ -519,7 +524,7 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
     dc,
     rw,
     adjrw,
-    cmi,
+    // cmi,
     wtlos,
     ot,
     rw0day,
@@ -527,5 +532,10 @@ export async function groupCase(input: GrouperInput, options?: GroupCaseOptions)
     warningCodeSum,
     warnings,
     trace,
+    usage_second
   };
+}
+
+function roundTo4(num: number): number {
+  return Math.round(Number(num) * 10000) / 10000;
 }
