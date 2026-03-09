@@ -95,9 +95,8 @@ async function grouperHandler(req: express.Request, res: express.Response, versi
     if (version === '1') {
       result = await groupCaseV1(payload);
     } else {
-      result = await groupCase(payload, { persist: parsed.source !== 'ui' });
+      result = await groupCase(payload);
     }
-    // const result = await groupCase(payload, { persist: parsed.source !== 'ui' });
     res.json({ ok: true, data: result });
   } catch (error) {
     if (error instanceof DrgStandardError) {
