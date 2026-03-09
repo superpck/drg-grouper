@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRG Seeker</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <main class="container">
+    <h1>DRG Seeker <small style="color: rgb(197, 192, 192);"> (beta-1)</small></h1>
+    <p class="subtitle">กรอกข้อมูลเคสเพื่อวิเคราะห์ DRG และดูขั้นตอนการคำนวณ</p>
+
+    <form id="drg-form" class="card">
+      <div class="grid">
+        <label>HCODE <input name="hcode" required value="10670" /></label>
+        <label>AN <input name="an" required value="demo-ui-001" /></label>
+        <label>Sex (1/2) <input name="sex" type="number" min="1" max="2" value="1" /></label>
+        <label>Age (year) <input name="age" type="number" min="0" value="50" /></label>
+        <label>AgeDay <input name="ageDay" type="number" min="0" value="0" /></label>
+        <label>DateAdm <input name="dateAdm" type="date" value="2025-10-01" /></label>
+        <label>TimeAdm(HH:MM) <input name="timeAdm" value="01:00" /></label>
+        <label>DateDsc <input name="dateDsc" type="date" value="2025-10-20" /></label>
+        <label>TimeDsc(HH:MM) <input name="timeDsc" value="09:00" /></label>
+        <label>LeaveDays <input name="leaveDays" type="number" min="0" value="0" /></label>
+        <label>AdmWt <input name="admWt" type="number" min="0" step="0.1" value="60" /></label>
+        <label>Principal Diagnosis (PDx) <input name="pdx" required value="B181" placeholder="เช่น B181" /></label>
+      </div>
+
+      <!-- <div class="grid-pdx">
+        <label class="pdx-input">
+          Principal Diagnosis (PDx)
+          <input name="pdx" required value="B181" placeholder="เช่น B181" />
+        </label>
+      </div> -->
+      <div class="grid-sdx-proc">
+        <label>SDx (คั่นด้วย comma หรือขึ้นบรรทัดใหม่)
+          <textarea name="sdx" rows="3">I10,E119</textarea>
+        </label>
+        <label>Proc (คั่นด้วย comma หรือขึ้นบรรทัดใหม่)
+          <textarea name="proc" rows="3">5059,9604</textarea>
+        </label>
+      </div>
+      <div id="code-name-panel" class="code-name-panel">
+        <div><b>PDx name:</b> <span id="pdx-name">-</span></div>
+        <div><b>SDx names:</b> <span id="sdx-names">-</span></div>
+        <div><b>Proc names:</b> <span id="proc-names">-</span></div>
+      </div>
+      <div class="actions">
+        <button id="analyze-btn" type="submit">Analyze DRG</button>
+        <span id="loading-spinner" class="spinner hidden" aria-live="polite">กำลังวิเคราะห์...</span>
+      </div>
+    </form>
+
+    <section id="summary" class="card hidden"></section>
+    <section id="trace" class="card hidden"></section>
+    <pre id="raw" class="card hidden"></pre>
+  </main>
+  <script src="./app.js"></script>
+</body>
+
+</html>
