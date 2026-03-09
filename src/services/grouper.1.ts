@@ -95,6 +95,7 @@ async function calcAdjRw(drg: string, rw: number, wtlos: number, ot: number, rw0
 }
 
 export async function groupCaseV1(input: GrouperInput): Promise<GrouperOutput> {
+  const timeStart = performance.now();
   const benchmark = await db('drg69_compare')
     .where({ hcode: input.hcode, an: input.an })
     .first();
@@ -140,5 +141,8 @@ export async function groupCaseV1(input: GrouperInput): Promise<GrouperOutput> {
     leave_days: input.leaveDays || 0,
   }).onConflict(['hcode', 'an']).merge();
 
-  return { hcode: input.hcode, an: input.an, drg, rw, adjrw, cmi, wtlos, ot, rw0day, los, mdc: '', dc: '', trace: [], drgDescription: '', warningCodeSum: 0, warnings: [] };
+  const timeEnd = performance.now();
+  const timeDiff = timeEnd - timeStart;
+  const usage_second = Number((Math.floor(timeDiff / 1000)+ ((timeDiff % 1000)/1000)).toFixed(2));
+  return { hcode: input.hcode, an: input.an, drg, rw, adjrw, cmi, wtlos, ot, rw0day, los, mdc: '', dc: '', trace: [], drgDescription: '', warningCodeSum: 0, warnings: [], usage_second };
 }
