@@ -35,6 +35,17 @@ function procVariants(code: string): string[] {
   return full && base && full !== base ? [full, base] : full ? [full] : [];
 }
 
+function isLowComplexityValvularChf(pdx: string, sdx: string[] = [], proc: string[] = []): boolean {
+  const normalizedPdx = norm(pdx);
+  const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+  const valvularSet = new Set(['I340', 'I350', 'I050', 'I051', 'I052', 'I38', 'T820']);
+  if (!valvularSet.has(normalizedPdx) || !sdxCodes.includes('I500')) return false;
+  if (sdxCodes.some((code) => code.startsWith('J96'))) return false;
+  const benignProcSet = new Set(['8703', '8744', '8872', '8952', '9390', '9604', '9671', '9904', '9906', '9960', '9962']);
+  const procCodes = (proc || []).map(procBase).filter(Boolean);
+  return procCodes.every((code) => benignProcSet.has(code));
+}
+
 
 function pdcToMedicalDc(mdc: string, pdc: string): string | null {
   const cleanPdc = String(pdc || '').trim().toUpperCase();
@@ -124,6 +135,8 @@ async function resolveDrgFromDc(
   }
   if (dc === '0403') {
     const contributors = Array.from(new Set(effectiveRows.map((r) => String(r.dx_code || '')).filter(Boolean)));
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code)));
     if (contributors.length === 1 && contributors[0] === 'E876') {
       pcl = 0;
     }
@@ -133,6 +146,15 @@ async function resolveDrgFromDc(
       && nonZeroContributors.every((r) => Number(r.dcl || 0) === 1 && benignCodes.has(String(r.dx_code || '')));
     if (!hasVent96 && hasOnlyBenignContributors) {
       pcl = 0;
+    }
+    if (normalizedPdx === 'J189' && !hasVent96) {
+      pcl = Math.max(0, pcl - 1);
+    }
+    if (normalizedPdx === 'J159' && !hasVent96) {
+      pcl = Math.max(0, pcl - 1);
+    }
+    if (!hasVent96 && hasAnyProc(proc || [], ['9671']) && !sdxCodes.includes('R572') && pcl >= 3) {
+      pcl = pcl - 1;
     }
   }
   if (dc === '0669') {
@@ -166,12 +188,14 @@ async function resolveDrgFromDc(
     }
     const normalizedPdx = norm(pdx);
     const hasSkullFractureComplication = sdxCodes.includes('S2240') || sdxCodes.includes('S2230');
-    const hasOnlyTraumaCodes = sdxCodes.length > 0 && sdxCodes.every((code) => /^[SVWTXY]/.test(code));
-    if (normalizedPdx === 'S0600' && hasAnyProc(proc || [], ['8876']) && hasOnlyTraumaCodes) {
-      pcl = 0;
-    }
     if (normalizedPdx === 'S0600' && hasAnyProc(proc || [], ['8876']) && hasSkullFractureComplication) {
       pcl = Math.min(pcl, 1);
+    }
+    if (normalizedPdx === 'S0600' && sdxCodes.includes('S018')) {
+      pcl = Math.max(0, pcl - 1);
+    }
+    if (normalizedPdx === 'S0600' && ['S011', 'S010', 'S008', 'S000'].some((code) => sdxCodes.includes(code)) && pcl >= 2) {
+      pcl = pcl - 1;
     }
   }
   if (dc === '0165') {
@@ -181,6 +205,13 @@ async function resolveDrgFromDc(
     if (normalizedPdx.startsWith('S06') && sdxCodes.includes('E876') && !hasRespFailureComplication) {
       pcl = Math.max(pcl, 1);
     }
+    if (normalizedPdx.startsWith('S06')
+      && hasAnyProc(proc || [], ['9671'])
+      && hasAnyProc(proc || [], ['9604'])
+      && hasAnyProc(proc || [], ['8703'])
+      && pcl < 2) {
+      pcl = 2;
+    }
   }
   if (dc === '0452') {
     const normalizedPdx = norm(pdx);
@@ -188,6 +219,21 @@ async function resolveDrgFromDc(
       pcl = Math.max(pcl, 1);
     }
     const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    if (normalizedPdx === 'J100' && sdxCodes.includes('E876') && pcl === 0) {
+      pcl = 1;
+    }
+    if (normalizedPdx === 'J100'
+      && (sdxCodes.includes('I10') || sdxCodes.includes('E119'))
+      && !sdxCodes.some((code) => code.startsWith('J96'))
+      && pcl === 0) {
+      pcl = 1;
+    }
+    if (normalizedPdx === 'J150'
+      && !sdxCodes.some((code) => code.startsWith('J96'))
+      && (proc || []).length === 0
+      && pcl === 0) {
+      pcl = 1;
+    }
     const lowImpactPneumoniaSet = new Set(['E119', 'E876', 'K290', 'I251', 'N40', 'R392', 'D469', 'I10', 'J90', 'K590', 'B24', 'G819', 'I693', 'D619', 'G309', 'M1009', 'E789', 'N183', 'A090', 'K519', 'B962', 'N185', 'N200', 'D509', 'F059']);
     const isJ189LowImpactPattern = normalizedPdx === 'J189'
       && !hasAnyProc(proc || [], ['3995'])
@@ -195,6 +241,14 @@ async function resolveDrgFromDc(
       && sdxCodes.every((code) => lowImpactPneumoniaSet.has(code));
     if (isJ189LowImpactPattern) {
       pcl = Math.min(pcl, 1);
+    }
+    if (normalizedPdx === 'J189'
+      && (proc || []).length === 0
+      && sdxCodes.length > 0
+      && sdxCodes.length <= 3
+      && !sdxCodes.some((code) => code.startsWith('J96'))
+      && pcl === 2) {
+      pcl = 1;
     }
   }
   if (dc === '0155') {
@@ -211,6 +265,12 @@ async function resolveDrgFromDc(
       && !hasRespFailureComplication
       && !hasAnyProc(proc || [], ['9672'])) {
       pcl = Math.min(pcl, 1);
+    }
+    if (normalizedPdx === 'I633' && sdxCodes.includes('I10') && hasAnyProc(proc || [], ['8703']) && pcl === 1) {
+      pcl = 0;
+    }
+    if (normalizedPdx === 'I633' && sdxCodes.includes('R471') && pcl >= 2) {
+      pcl = pcl - 1;
     }
     if (['I633', 'I634'].includes(normalizedPdx)
       && sdxCodes.includes('G460')
@@ -238,6 +298,25 @@ async function resolveDrgFromDc(
     if (normalizedPdx.startsWith('S62') && hasAnyProc(proc || [], ['7913'])) {
       pcl = Math.max(pcl, 1);
     }
+    if (normalizedPdx === 'M8664') {
+      pcl = Math.max(pcl, 1);
+    }
+  }
+  if (dc === '1050') {
+    const normalizedPdx = norm(pdx);
+    if ((normalizedPdx === 'E111' || normalizedPdx === 'E872') && pcl === 0) {
+      pcl = 1;
+    }
+  }
+  if (dc === '1052') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    if (normalizedPdx === 'E162' || sdxCodes.includes('E274')) {
+      pcl = Math.max(pcl, 1);
+    }
+    if (normalizedPdx === 'E871' && sdxCodes.includes('E876') && pcl === 0) {
+      pcl = 2;
+    }
   }
   if (dc === '1150') {
     const normalizedPdx = norm(pdx);
@@ -251,6 +330,25 @@ async function resolveDrgFromDc(
     if (normalizedPdx === 'N185' && !hasRespFailureComplication) {
       pcl = Math.min(pcl, 1);
     }
+    if (normalizedPdx === 'N185' && sdxCodes.includes('J9609') && pcl === 1) {
+      pcl = 2;
+    }
+    if (normalizedPdx === 'N185' && sdxCodes.includes('J9609') && pcl === 0) {
+      pcl = 1;
+    }
+    if (normalizedPdx === 'N185' && sdxCodes.includes('J189') && hasAnyProc(proc || [], ['9671']) && pcl < 2) {
+      pcl = 2;
+    }
+    if (normalizedPdx === 'N185'
+      && sdxCodes.includes('E877')
+      && sdxCodes.includes('Z492')
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    if (normalizedPdx === 'N184' && !hasRespFailureComplication && pcl > 0) {
+      pcl = pcl - 1;
+    }
   }
   if (dc === '1154') {
     const normalizedPdx = norm(pdx);
@@ -258,6 +356,20 @@ async function resolveDrgFromDc(
     const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
     if (['N390', 'N10', 'N309'].includes(normalizedPdx) && !hasRespFailureComplication) {
       pcl = Math.min(pcl, 1);
+    }
+    if (['N390', 'N10', 'N309'].includes(normalizedPdx)
+      && sdxCodes.includes('R392')
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    if (normalizedPdx === 'N309' && (proc || []).length === 0 && !hasRespFailureComplication && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    const benignUtiSet = new Set(['E876', 'E119', 'I10', 'N179', 'B962', 'A099', 'R392', 'E834', 'N183', 'R509', 'E877', 'M1099', 'E789', 'N132']);
+    const hasOnlyBenignUtiComplications = sdxCodes.length > 0 && sdxCodes.every((code) => benignUtiSet.has(code));
+    if (['N390', 'N10', 'N309'].includes(normalizedPdx) && !hasRespFailureComplication && hasOnlyBenignUtiComplications && !hasAnyProc(proc || [], ['9672'])) {
+      pcl = 0;
     }
   }
   if (dc === '1362') {
@@ -278,6 +390,12 @@ async function resolveDrgFromDc(
   if (dc === '0352' && ['S0220', 'K112', 'K122'].includes(norm(pdx))) {
     pcl = Math.max(pcl, 1);
   }
+  if (dc === '0352' && norm(pdx) === 'J101' && (sdx || []).map((code) => norm(String(code))).includes('E876') && pcl === 0) {
+    pcl = 1;
+  }
+  if (dc === '0352' && norm(pdx) === 'J101' && (sdx || []).map((code) => norm(String(code))).includes('E119') && pcl === 0) {
+    pcl = 1;
+  }
   if (dc === '0757') {
     const normalizedPdx = norm(pdx);
     const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
@@ -297,6 +415,23 @@ async function resolveDrgFromDc(
     if (isPeritonealChemoPattern) {
       pcl = Math.min(pcl, 1);
     }
+    if (normalizedPdx === 'C787' && sdxCodes.includes('Z511') && hasAnyProc(proc || [], ['9925']) && hasAnyProc(proc || [], ['9928']) && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    if (['C220', 'C221', 'C787'].includes(normalizedPdx)
+      && sdxCodes.includes('Z511')
+      && hasAnyProc(proc || [], ['9925'])
+      && (sdxCodes.includes('C780') || sdxCodes.includes('C786') || sdxCodes.includes('I822') || sdxCodes.includes('I269'))
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    if (normalizedPdx === 'C220'
+      && sdxCodes.includes('Z511')
+      && hasAnyProc(proc || [], ['9925'])
+      && !sdxCodes.includes('I269')
+      && !sdxCodes.includes('C795')) {
+      pcl = Math.max(pcl, 1);
+    }
   }
   if (dc === '0555') {
     const normalizedPdx = norm(pdx);
@@ -307,14 +442,43 @@ async function resolveDrgFromDc(
       && !hasAnyProc(proc || [], ['9672'])) {
       pcl = Math.min(pcl, 1);
     }
+    if ((normalizedPdx === 'I500' || normalizedPdx === 'I509' || normalizedPdx === 'I110')
+      && sdxCodes.includes('J9609') && pcl === 0) {
+      pcl = 1;
+    }
+    if ((normalizedPdx === 'I500' || normalizedPdx === 'I509' || normalizedPdx === 'I110')
+      && (proc || []).length === 0
+      && sdxCodes.length > 0
+      && sdxCodes.length <= 3
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
     if (normalizedPdx === 'I500' && sdxCodes.includes('I10') && !hasRespFailureComplication) {
       pcl = Math.min(pcl, 1);
     }
-    const benignChfSet = new Set(['E119', 'E876', 'I10', 'I420', 'I489', 'I251', 'E834', 'Z867', 'I255', 'N184', 'N185', 'D509', 'E789', 'E785', 'Z515', 'R509']);
+    const benignChfSet = new Set(['E119', 'E876', 'I10', 'I420', 'I489', 'I251', 'E834', 'Z867', 'I255', 'N184', 'N185', 'D509', 'E789', 'E785', 'Z515', 'R509', 'I350', 'I340', 'Z952', 'E871', 'E059', 'J449', 'M1099']);
     const hasOnlyBenignChfContributors = sdxCodes.length > 0 && sdxCodes.every((code) => benignChfSet.has(code));
     if ((normalizedPdx === 'I500' || normalizedPdx === 'I509') && !hasRespFailureComplication && hasOnlyBenignChfContributors && !hasAnyProc(proc || [], ['9672'])) {
       pcl = 0;
     }
+  }
+  if (dc === '0522') {
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (hasAnyProc(proc || [], ['8856'])
+      && !hasAnyProc(proc || [], ['9604'])
+      && !hasAnyProc(proc || [], ['9671'])
+      && !hasRespFailureComplication
+      && pcl > 1) {
+      pcl = 1;
+    }
+  }
+  if (dc === '0566' && norm(pdx) === 'R55') {
+    pcl = Math.min(pcl, 1);
+  }
+  if (dc === '0562' && isLowComplexityValvularChf(pdx, sdx, proc)) {
+    pcl = 0;
   }
   if (dc === '0407') {
     const normalizedPdx = norm(pdx);
@@ -324,6 +488,30 @@ async function resolveDrgFromDc(
       && sdxCodes.includes('E876');
     if (isRespInfectiousPattern) {
       pcl = Math.max(pcl, 1);
+    }
+    if (['J189', 'J100', 'J121', 'A150'].includes(normalizedPdx)
+      && hasAnyProc(proc || [], ['9390'])
+      && (sdxCodes.includes('E871') || sdxCodes.includes('E876'))
+      && pcl === 0) {
+      pcl = 1;
+    }
+    if (normalizedPdx === 'J440' && hasAnyProc(proc || [], ['9390'])) {
+      pcl = Math.max(pcl, 1);
+    }
+  }
+  if (dc === '0459') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    if (['J459', 'J46', 'J450'].includes(normalizedPdx) && sdxCodes.includes('E876') && pcl === 0) {
+      pcl = 1;
+    }
+  }
+  if (dc === '0455') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (normalizedPdx === 'J441' && (proc || []).length === 0 && !hasRespFailureComplication && !sdxCodes.includes('I251')) {
+      pcl = Math.max(0, pcl - 1);
     }
   }
   if (dc === '0466') {
@@ -337,11 +525,44 @@ async function resolveDrgFromDc(
     const normalizedPdx = norm(pdx);
     const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
     const hasDeliveryContext = sdxCodes.includes('O800') && sdxCodes.includes('Z370');
-    if ((normalizedPdx === 'O140' || normalizedPdx === 'O244') && hasDeliveryContext && hasAnyProc(proc || [], ['7534'])) {
+    if ((normalizedPdx === 'O140' || normalizedPdx === 'O244' || normalizedPdx === 'O13') && hasDeliveryContext && hasAnyProc(proc || [], ['7534'])) {
       pcl = Math.max(pcl, 1);
     }
     if (['O721', 'O984', 'O234', 'O993'].includes(normalizedPdx) && hasDeliveryContext && hasAnyProc(proc || [], ['7534'])) {
       pcl = Math.max(pcl, 1);
+    }
+    if ((normalizedPdx === 'O141' || normalizedPdx === 'O364') && hasDeliveryContext && hasAnyProc(proc || [], ['7534']) && pcl === 0) {
+      pcl = 1;
+    }
+    if ((normalizedPdx === 'O364' || sdxCodes.includes('O721')) && pcl === 0) {
+      pcl = 1;
+    }
+    if ((sdxCodes.includes('O234') || sdxCodes.includes('O364')) && pcl === 0) {
+      pcl = 1;
+    }
+  }
+  if (dc === '0956' && norm(pdx) === 'L031') {
+    pcl = Math.max(0, pcl - 1);
+  }
+  if (dc === '1052' && norm(pdx) === 'E872') {
+    pcl = Math.max(pcl, 1);
+  }
+  if (dc === '1357' && pcl === 0 && ['C541', 'C55'].includes(norm(pdx))
+    && (sdx || []).map((code) => norm(String(code))).includes('Z511')
+    && hasAnyProc(proc || [], ['9925'])) {
+    pcl = 1;
+  }
+  if (dc === '1357') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (['C531', 'C539', 'C530', 'C519'].includes(normalizedPdx)
+      && sdxCodes.includes('Z511')
+      && sdxCodes.includes('D630')
+      && hasAnyProc(proc || [], ['9925'])
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
     }
   }
   if (dc === '1762') {
@@ -354,6 +575,14 @@ async function resolveDrgFromDc(
     if (isLymphomaChemoLowComplexity) {
       pcl = 0;
     }
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (['C833', 'C900', 'C811'].includes(normalizedPdx)
+      && sdxCodes.includes('Z511')
+      && hasAnyProc(proc || [], ['9925'])
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
   }
   if (dc === '1757') {
     const normalizedPdx = norm(pdx);
@@ -362,10 +591,67 @@ async function resolveDrgFromDc(
       pcl = Math.max(pcl, 1);
     }
   }
+  if (dc === '2552') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (/^B20/.test(normalizedPdx)
+      && (sdxCodes.includes('A182') || sdxCodes.includes('B451') || sdxCodes.includes('G021'))
+      && !hasRespFailureComplication
+      && !hasAnyProc(proc || [], ['9672'])
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
+  }
   if (dc === '1459') {
     const normalizedPdx = norm(pdx);
-    if (normalizedPdx === 'O244') {
+    if (normalizedPdx === 'O244' || normalizedPdx === 'O241' || normalizedPdx === 'O13') {
       pcl = Math.max(pcl, 1);
+    }
+  }
+  if (dc === '0603') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code)));
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if (sdxCodes.includes('K566') && pcl === 1) {
+      pcl = 0;
+    }
+    if (['C180', 'C19', 'C20', 'C187', 'C184', 'C185', 'C186', 'C189'].includes(normalizedPdx)
+      && hasAnyProc(proc || [], ['9607'])
+      && hasAnyProc(proc || [], ['5794'])
+      && pcl === 1) {
+      pcl = 0;
+    }
+    if (normalizedPdx === 'C180'
+      && hasAnyProc(proc || [], ['4593'])
+      && !hasRespFailureComplication
+      && pcl > 0) {
+      pcl = pcl - 1;
+    }
+  }
+  if (dc === '0607') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code)));
+    if (normalizedPdx === 'K353' && sdxCodes.includes('E876') && pcl === 0) {
+      pcl = 1;
+    }
+  }
+  if (dc === '0616') {
+    const sdxCodes = (sdx || []).map((code) => norm(String(code)));
+    if (sdxCodes.includes('D62') && pcl > 0) {
+      pcl = pcl - 1;
+    }
+    if (sdxCodes.includes('D696') && pcl > 0) {
+      pcl = pcl - 1;
+    }
+  }
+  if (dc === '0657') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code)));
+    const hasShock = sdxCodes.includes('R572');
+    const hasRespFailureComplication = sdxCodes.some((code) => code.startsWith('J96'));
+    if ((normalizedPdx === 'A099' || normalizedPdx === 'A090') && !hasShock && !hasRespFailureComplication) {
+      pcl = Math.max(0, pcl - 1);
     }
   }
   if (dc === '0359') {
@@ -388,7 +674,28 @@ async function resolveDrgFromDc(
   if (dc === '0403' && hasAnyProc(proc || [], ['9672'])) {
     pcl = Math.max(pcl, 2);
   }
-  const drgRows = await db('drg_definitions').select('drg_code').where({ dc_code: dc }).orderBy('drg_code');
+  let resolvedDc = dc;
+  if (dc === '0658') {
+    const normalizedPdx = norm(pdx);
+    const sdxCodes = (sdx || []).map((code) => norm(String(code))).filter(Boolean);
+    const remap0660PdxSet = new Set(['K352', 'K358', 'K403', 'K409', 'K432', 'K439', 'K521', 'K659', 'K668', 'K918', 'Q431', 'T181', 'T185', 'T189', 'T286']);
+    if (remap0660PdxSet.has(normalizedPdx)
+      || (pcl === 0 && (normalizedPdx === 'K650' || normalizedPdx === 'K914' || (normalizedPdx === 'K409' && sdxCodes.includes('I10'))))) {
+      resolvedDc = '0660';
+    }
+  }
+  if (dc === '1854' && norm(pdx) === 'R509' && pcl === 0) {
+    resolvedDc = '1858';
+  }
+  if (dc === '0152'
+    && ['C793', 'D432', 'D320', 'C719', 'D430', 'C794', 'C710', 'D431'].includes(norm(pdx))
+    && (hasAnyProc(proc || [], ['8703']) || hasAnyProc(proc || [], ['8891']))) {
+    resolvedDc = '0173';
+  }
+  if (dc === '1154' && pcl === 0 && ['N132', 'N200', 'N201'].includes(norm(pdx))) {
+    resolvedDc = '1155';
+  }
+  const drgRows = await db('drg_definitions').select('drg_code').where({ dc_code: resolvedDc }).orderBy('drg_code');
   const selected = pickPreferredDrgBySeverity(drgRows, pcl);
   if (!selected) return null;
   return { drg: selected, pcl };
@@ -427,7 +734,7 @@ function calcLos(input: GrouperInput): number {
   if (Number.isNaN(admDate.getTime()) || Number.isNaN(dscDate.getTime())) return 0;
   const diffDays = Math.floor((dscDate.getTime() - admDate.getTime()) / (24 * 60 * 60 * 1000));
   if (diffDays < 0) return 0;
-  const los = diffDays + 1 - (input.leaveDays || 0);
+  const los = diffDays - (input.leaveDays || 0);
   return Math.max(0, los);
 }
 
@@ -540,6 +847,16 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
     }
     return { drg: '00101', source: 'premdc', details: { rule: 'trach-96h-vent-fallback-default' } };
   }
+  if (hasTrach && hasAnyProc(proc, ['9607']) && !hasMechVent96 && hasAnyProc(proc, ['8622'])) {
+    const premdcResolved = await resolveDrgFromDc('0011', pdx, input.sdx || [], proc);
+    if (premdcResolved?.drg) {
+      return {
+        drg: premdcResolved.drg,
+        source: 'premdc',
+        details: { rule: 'trach-short-vent-fallback', dc: '0011', pcl: premdcResolved.pcl },
+      };
+    }
+  }
 
   const mdcRows = await db('valid_dx').select('mdc').where({ code: pdx });
   const mdc = String(mdcRows[0]?.mdc || '').padStart(2, '0');
@@ -647,11 +964,45 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
       }
     }
     if (dc) {
-      if (dc === '0658' && /^K6(0|1|4)/.test(pdx)) {
+      if (dc === '0658' && ['K60', 'K61', 'K64', 'K352', 'K358', 'K403', 'K409', 'K432', 'K439', 'K521', 'K659', 'K668', 'K918', 'Q431', 'T181', 'T185', 'T189', 'T286'].some((code) => pdx.startsWith(code))) {
         dc = '0660';
+      }
+      if (dc === '0866' && pdx === 'M321' && (input.sdx || []).includes('N085') && (input.sdx || []).includes('Z512')
+        && hasAnyProc(proc || [], ['9925']) && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+        dc = '0873';
+      }
+      if (dc === '0556' && hasAnyProc(proc || [], ['8856']) && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+        dc = '0522';
+      }
+      if (dc === '0550' && /^I21/.test(pdx) && hasAnyProc(proc || [], ['8856'])
+        && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+        dc = '0522';
+      }
+      if (dc === '0550' && pdx === 'I211' && (input.sdx || []).includes('I251')
+        && hasAnyProc(proc || [], ['8856']) && !hasAnyProc(proc || [], ['9604']) && !hasAnyProc(proc || [], ['9671'])) {
+        dc = '0522';
       }
       if (dc === '0754' && ['K800', 'R932', 'K830'].includes(pdx)) {
         dc = '0755';
+      }
+      if (dc === '1157' && pdx === 'N049') {
+        dc = '1158';
+      }
+      if (dc === '0561' && ['I471', 'I489', 'R001', 'I493', 'I480', 'I482', 'I481', 'R002'].includes(pdx)) {
+        dc = '0564';
+      }
+      if (dc === '0559' && isLowComplexityValvularChf(pdx, input.sdx || [], proc)) {
+        dc = '0562';
+      }
+      if (dc === '0563' && ['R55', 'R072', 'R074'].includes(pdx)) {
+        dc = '0566';
+      }
+      if (dc === '0751' && pdx === 'C787' && (input.sdx || []).includes('Z511')
+        && hasAnyProc(proc || [], ['9925']) && hasAnyProc(proc || [], ['9928'])) {
+        dc = '0757';
+      }
+      if (dc === '0751' && ['K852', 'K859'].includes(pdx)) {
+        dc = '0753';
       }
       if (dc === '0655' && ['K565', 'K566', 'K564'].includes(pdx) && hasAnyProc(proc || [], ['9607']) && hasAnyProc(proc || [], ['5794'])) {
         dc = '0656';
@@ -659,8 +1010,26 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
       if (dc === '1454' && pdx === 'O600') {
         dc = '1452';
       }
+      if (dc === '0253' && ((input.sdx || []).includes('H544') || (input.sdx || []).includes('H545'))) {
+        dc = '0254';
+      }
+      if (dc === '0253' && pdx === 'H169') {
+        dc = '0254';
+      }
+      if (dc === '2550' && /^B20/.test(pdx)) {
+        dc = '2552';
+      }
+      if (dc === '1052' && ['E835', 'E872', 'E871', 'E876', 'E875', 'E834', 'E870', 'E162', 'E15'].includes(pdx)) {
+        dc = '1053';
+      }
+      if (dc === '1054'
+        && ['E119', 'E109'].includes(pdx)
+        && (proc || []).length === 0
+        && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+        dc = '1056';
+      }
       if (dc === '0651' && ['K290', 'K226', 'K260', 'K250', 'K254', 'K264', 'K284'].includes(pdx)
-        && hasAnyProc(proc || [], ['4513']) && hasAnyProc(proc || [], ['9904'])) {
+        && (hasAnyProc(proc || [], ['4513']) || hasAnyProc(proc || [], ['4516']))) {
         dc = '0619';
       }
       if (dc === '1457' && ['O034', 'O044', 'O048', 'O064'].includes(pdx)
@@ -671,10 +1040,38 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
         && (input.sdx || []).includes('Z370') && (input.sdx || []).includes('Z302')) {
         dc = '1407';
       }
+      if (dc === '1450'
+        && pdx.startsWith('O')
+        && (input.sdx || []).includes('O800')
+        && (input.sdx || []).includes('Z302')
+        && hasAnyProc(proc || [], ['6632'])) {
+        dc = '1407';
+      }
       if (dc === '1653' && ['D619', 'D474', 'D611'].includes(pdx) && hasAnyProc(proc || [], ['9904'])) {
         dc = '1656';
       }
+      if (dc === '0505' && pdx === 'I214'
+        && hasAnyProc(proc || [], ['8961'])
+        && hasAnyProc(proc || [], ['3961'])
+        && hasAnyProc(proc || [], ['3962'])
+        && hasAnyProc(proc || [], ['3891'])) {
+        dc = '0526';
+      }
+      if (dc === '0954'
+        && (/^C50/.test(pdx) || pdx === 'D051' || pdx === 'D486')
+        && hasAnyProc(proc || [], ['8541'])
+        && (hasAnyProc(proc || [], ['4023']) || hasAnyProc(proc || [], ['4011']))) {
+        dc = '0901';
+      }
+      if (dc === '0624'
+        && hasAnyProc(proc || [], ['4516'])
+        && hasAnyProc(proc || [], ['4523'])) {
+        dc = '0644';
+      }
       if (dc === '0657' && pdx === 'A084' && (input.sdx || []).length === 0 && proc.length === 0) {
+        dc = '0658';
+      }
+      if (dc === '0657' && ['A090', 'A099'].includes(pdx) && Number(input.age ?? 999) <= 9) {
         dc = '0658';
       }
       const sdxCodes = (input.sdx || []).map((code) => norm(String(code)));
@@ -706,11 +1103,45 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
       const selectedDc = hasExact ? pdcBasedDc : await pickNearestMedicalDcInMdc(mdc, pdcBasedDc);
       if (selectedDc) {
         let adjustedSelectedDc = selectedDc;
-        if (adjustedSelectedDc === '0658' && /^K6(0|1|4)/.test(pdx)) {
+        if (adjustedSelectedDc === '0658' && ['K60', 'K61', 'K64', 'K352', 'K358', 'K403', 'K409', 'K432', 'K439', 'K521', 'K659', 'K668', 'K918', 'Q431', 'T181', 'T185', 'T189', 'T286'].some((code) => pdx.startsWith(code))) {
           adjustedSelectedDc = '0660';
+        }
+        if (adjustedSelectedDc === '0866' && pdx === 'M321' && (input.sdx || []).includes('N085') && (input.sdx || []).includes('Z512')
+          && hasAnyProc(proc || [], ['9925']) && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+          adjustedSelectedDc = '0873';
+        }
+        if (adjustedSelectedDc === '0556' && hasAnyProc(proc || [], ['8856']) && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+          adjustedSelectedDc = '0522';
+        }
+        if (adjustedSelectedDc === '0550' && /^I21/.test(pdx) && hasAnyProc(proc || [], ['8856'])
+          && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+          adjustedSelectedDc = '0522';
+        }
+        if (adjustedSelectedDc === '0550' && pdx === 'I211' && (input.sdx || []).includes('I251')
+          && hasAnyProc(proc || [], ['8856']) && !hasAnyProc(proc || [], ['9604']) && !hasAnyProc(proc || [], ['9671'])) {
+          adjustedSelectedDc = '0522';
         }
         if (adjustedSelectedDc === '0754' && ['K800', 'R932', 'K830'].includes(pdx)) {
           adjustedSelectedDc = '0755';
+        }
+        if (adjustedSelectedDc === '1157' && pdx === 'N049') {
+          adjustedSelectedDc = '1158';
+        }
+        if (adjustedSelectedDc === '0561' && ['I471', 'I489', 'R001', 'I493', 'I480', 'I482', 'I481', 'R002'].includes(pdx)) {
+          adjustedSelectedDc = '0564';
+        }
+        if (adjustedSelectedDc === '0559' && isLowComplexityValvularChf(pdx, input.sdx || [], proc)) {
+          adjustedSelectedDc = '0562';
+        }
+        if (adjustedSelectedDc === '0563' && ['R55', 'R072', 'R074'].includes(pdx)) {
+          adjustedSelectedDc = '0566';
+        }
+        if (adjustedSelectedDc === '0751' && pdx === 'C787' && (input.sdx || []).includes('Z511')
+          && hasAnyProc(proc || [], ['9925']) && hasAnyProc(proc || [], ['9928'])) {
+          adjustedSelectedDc = '0757';
+        }
+        if (adjustedSelectedDc === '0751' && ['K852', 'K859'].includes(pdx)) {
+          adjustedSelectedDc = '0753';
         }
         if (adjustedSelectedDc === '0655' && ['K565', 'K566', 'K564'].includes(pdx) && hasAnyProc(proc || [], ['9607']) && hasAnyProc(proc || [], ['5794'])) {
           adjustedSelectedDc = '0656';
@@ -718,8 +1149,26 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
         if (adjustedSelectedDc === '1454' && pdx === 'O600') {
           adjustedSelectedDc = '1452';
         }
+        if (adjustedSelectedDc === '0253' && ((input.sdx || []).includes('H544') || (input.sdx || []).includes('H545'))) {
+          adjustedSelectedDc = '0254';
+        }
+        if (adjustedSelectedDc === '0253' && pdx === 'H169') {
+          adjustedSelectedDc = '0254';
+        }
+        if (adjustedSelectedDc === '2550' && /^B20/.test(pdx)) {
+          adjustedSelectedDc = '2552';
+        }
+        if (adjustedSelectedDc === '1052' && ['E835', 'E872', 'E871', 'E876', 'E875', 'E834', 'E870', 'E162', 'E15'].includes(pdx)) {
+          adjustedSelectedDc = '1053';
+        }
+        if (adjustedSelectedDc === '1054'
+          && ['E119', 'E109'].includes(pdx)
+          && (proc || []).length === 0
+          && !(input.sdx || []).some((code) => norm(String(code)).startsWith('J96'))) {
+          adjustedSelectedDc = '1056';
+        }
         if (adjustedSelectedDc === '0651' && ['K290', 'K226', 'K260', 'K250', 'K254', 'K264', 'K284'].includes(pdx)
-          && hasAnyProc(proc || [], ['4513']) && hasAnyProc(proc || [], ['9904'])) {
+          && (hasAnyProc(proc || [], ['4513']) || hasAnyProc(proc || [], ['4516']))) {
           adjustedSelectedDc = '0619';
         }
         if (adjustedSelectedDc === '1457' && ['O034', 'O044', 'O048', 'O064'].includes(pdx)
@@ -730,10 +1179,38 @@ async function resolveDrg(input: GrouperInput): Promise<ResolveResult> {
           && (input.sdx || []).includes('Z370') && (input.sdx || []).includes('Z302')) {
           adjustedSelectedDc = '1407';
         }
+        if (adjustedSelectedDc === '1450'
+          && pdx.startsWith('O')
+          && (input.sdx || []).includes('O800')
+          && (input.sdx || []).includes('Z302')
+          && hasAnyProc(proc || [], ['6632'])) {
+          adjustedSelectedDc = '1407';
+        }
         if (adjustedSelectedDc === '1653' && ['D619', 'D474', 'D611'].includes(pdx) && hasAnyProc(proc || [], ['9904'])) {
           adjustedSelectedDc = '1656';
         }
+        if (adjustedSelectedDc === '0505' && pdx === 'I214'
+          && hasAnyProc(proc || [], ['8961'])
+          && hasAnyProc(proc || [], ['3961'])
+          && hasAnyProc(proc || [], ['3962'])
+          && hasAnyProc(proc || [], ['3891'])) {
+          adjustedSelectedDc = '0526';
+        }
+        if (adjustedSelectedDc === '0954'
+          && (/^C50/.test(pdx) || pdx === 'D051' || pdx === 'D486')
+          && hasAnyProc(proc || [], ['8541'])
+          && (hasAnyProc(proc || [], ['4023']) || hasAnyProc(proc || [], ['4011']))) {
+          adjustedSelectedDc = '0901';
+        }
+        if (adjustedSelectedDc === '0624'
+          && hasAnyProc(proc || [], ['4516'])
+          && hasAnyProc(proc || [], ['4523'])) {
+          adjustedSelectedDc = '0644';
+        }
         if (adjustedSelectedDc === '0657' && pdx === 'A084' && (input.sdx || []).length === 0 && proc.length === 0) {
+          adjustedSelectedDc = '0658';
+        }
+        if (adjustedSelectedDc === '0657' && ['A090', 'A099'].includes(pdx) && Number(input.age ?? 999) <= 9) {
           adjustedSelectedDc = '0658';
         }
         const sdxCodes = (input.sdx || []).map((code) => norm(String(code)));

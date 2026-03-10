@@ -39,6 +39,24 @@ h3 {
   color: #4b5563;
 }
 
+.sdxname {
+  margin-left: 5px;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.sdxname span {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.sdxname:hover {
+  color: #2563eb;
+  font-weight: 800;
+  /* font-size: larger; */
+  transition: color 0.2s, font-size 0.2s;
+}
+
 .card {
   background: #fff;
   border: 1px solid #dbe1ea;

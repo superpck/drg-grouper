@@ -48,12 +48,12 @@ function showCodeNames(data) {
     procNamesEl.textContent = '-';
     return;
   }
-  pdxNameEl.textContent = data.pdx?.code ? `${data.pdx.code}: ${data.pdx.name || '(ไม่พบชื่อ)'}` : '-';
-  sdxNamesEl.textContent = data.sdx?.length
-    ? data.sdx.map((v) => `${v.code}: ${v.name || '(ไม่พบชื่อ)'}`).join(' | ')
+  pdxNameEl.innerHTML = data.pdx?.code ? `<div class="sdxname"><span>${data.pdx.code}</span>: ${data.pdx.name || '(ไม่พบชื่อ)'}</div>` : '-';
+  sdxNamesEl.innerHTML = data.sdx?.length
+    ? data.sdx.map((v) => `<div class="sdxname"><span>${v.code}</span>: ${v.name || '(ไม่พบชื่อ)'}</div>`)
     : '-';
-  procNamesEl.textContent = data.proc?.length
-    ? data.proc.map((v) => `${v.code}: ${v.name || '(ไม่พบชื่อ)'}`).join(' | ')
+  procNamesEl.innerHTML = data.proc?.length
+    ? data.proc.map((v) => `<div class="sdxname"><span>${v.code}</span>: ${v.name || '(ไม่พบชื่อ)'}</div>`)
     : '-';
 }
 
